@@ -270,6 +270,7 @@ authRouter.get("/me", auth, async (req: AuthRequest, res) => {
 
 // Google Auth endpoint
 authRouter.post("/google", async (req, res) => {
+    console.log("Google Auth request received body:", JSON.stringify(req.body));
     try {
         const { idToken, accessToken } = req.body;
 

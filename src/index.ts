@@ -53,6 +53,10 @@ app.get("/", (req, res) => {
   res.send("Welcome to my app!!!!!!!!");
 });
 
+app.get("/api/test", (req, res) => {
+  res.json({ message: "API is working", time: new Date().toISOString() });
+});
+
 // Initialize database and start server
 const PORT = process.env.PORT || 5004;
 initializeDatabase()
