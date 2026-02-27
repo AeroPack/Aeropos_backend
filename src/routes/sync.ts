@@ -12,6 +12,7 @@ const syncRouter = Router();
 syncRouter.use(auth);
 
 syncRouter.post("/", async (req: AuthRequest, res) => {
+    console.log(`Sync request received for company: ${req.companyId}`);
     try {
         const { lastSyncTime, changes } = req.body;
         const lastSync = lastSyncTime ? new Date(lastSyncTime) : new Date(0);

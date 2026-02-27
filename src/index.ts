@@ -20,6 +20,18 @@ import roleRouter from "./routes/roles";
 
 const app = express();
 
+// Set COOP header for Google Auth
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  next();
+});
+
+// Logging middleware
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+  next();
+});
+
 app.use(cors());
 app.use(express.json());
 // Serve static files from uploads directory
@@ -42,10 +54,11 @@ app.get("/", (req, res) => {
 });
 
 // Initialize database and start server
+const PORT = process.env.PORT || 5004;
 initializeDatabase()
   .then(() => {
-    app.listen(5002, "0.0.0.0", () => {
-      console.log("Server started on port 5002");
+    app.listen(Number(PORT), "0.0.0.0", () => {
+      console.log(`Server started on port ${PORT}`);
     });
   })
   .catch((error) => {
