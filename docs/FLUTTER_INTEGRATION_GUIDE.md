@@ -2,7 +2,7 @@
 
 ## API Summary
 
-**Base URL:** `http://localhost:5002`  
+**Base URL:** `http://localhost:5004`  
 **Auth Header:** `x-auth-token: YOUR_JWT_TOKEN`
 
 ### Key Endpoints
@@ -43,7 +43,7 @@ BACKEND CHANGES:
 4. Authentication returns a JWT token that must be included in all requests
 
 API ENDPOINTS:
-- Base URL: http://localhost:5002
+- Base URL: http://localhost:5004
 - Auth header: x-auth-token: JWT_TOKEN
 - Signup: POST /auth/signup (body: {name, email, password, businessName})
 - Login: POST /auth/login (body: {email, password})
@@ -145,7 +145,7 @@ class AppDatabase extends _$AppDatabase {
 
 ```dart
 class ApiService {
-  static const baseUrl = 'http://localhost:5002';
+  static const baseUrl = 'http://localhost:5004';
   String? _token;
 
   // Set token after login/signup

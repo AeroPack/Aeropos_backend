@@ -4,9 +4,9 @@ services:
       context: ./
     restart: always
     ports:
-      - "5005:5002" # Host 5005 -> Container 5002
+      - "5004:5004" # Host 5004 -> Container 5004
     environment:
-      - PORT=5002
+      - PORT=5004
       - DATABASE_URL=postgresql://postgres:test123@db:5432/mydb
     depends_on:
       - db

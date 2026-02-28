@@ -7,7 +7,7 @@ echo ""
 
 # First, login to get a token
 echo "1. Logging in to get auth token..."
-LOGIN_RESPONSE=$(curl -s -X POST http://localhost:5002/auth/signin \
+LOGIN_RESPONSE=$(curl -s -X POST http://localhost:5004/auth/signin \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@test.com",
@@ -37,7 +37,7 @@ echo ""
 
 # Upload the image
 echo "3. Uploading profile image..."
-UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:5002/api/profile/upload-image \
+UPLOAD_RESPONSE=$(curl -s -X POST http://localhost:5004/api/profile/upload-image \
   -H "x-auth-token: $TOKEN" \
   -F "image=@/tmp/test-profile.jpg")
 
@@ -47,7 +47,7 @@ echo ""
 
 # Get profile to verify image path
 echo "4. Getting profile to verify image..."
-PROFILE_RESPONSE=$(curl -s -X GET http://localhost:5002/api/profile \
+PROFILE_RESPONSE=$(curl -s -X GET http://localhost:5004/api/profile \
   -H "x-auth-token: $TOKEN")
 
 echo "Profile Response:"
@@ -63,10 +63,10 @@ if [ ! -z "$IMAGE_URL" ]; then
   # Try to access the image
   echo ""
   echo "5. Testing image retrieval..."
-  IMAGE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5002$IMAGE_URL)
+  IMAGE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5004$IMAGE_URL)
   
   if [ "$IMAGE_STATUS" = "200" ]; then
-    echo "✅ Image is accessible at http://localhost:5002$IMAGE_URL"
+    echo "✅ Image is accessible at http://localhost:5004$IMAGE_URL"
   else
     echo "❌ Image not accessible (HTTP $IMAGE_STATUS)"
   fi

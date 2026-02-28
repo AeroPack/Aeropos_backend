@@ -1,6 +1,6 @@
 #!/bin/bash
 
-BASE_URL="http://localhost:5002/api/auth"
+BASE_URL="http://localhost:5004/api/auth"
 EMAIL="testuser_$(date +%s)@example.com"
 PASSWORD="password123"
 

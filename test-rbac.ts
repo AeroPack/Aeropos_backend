@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { expect } from 'expect';
 
-const API_URL = 'http://localhost:5002/api';
+const API_URL = 'http://localhost:5004/api';
 
 // You might need to adjust these credentials or create a setup script to ensure these users exist
 const ADMIN_EMAIL = 'admin@example.com';

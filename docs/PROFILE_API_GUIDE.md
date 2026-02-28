@@ -23,7 +23,7 @@ The token is obtained from the login endpoint (`POST /api/auth/login`) and conta
 ### Request
 
 **Method:** `GET`  
-**Endpoint:** `http://localhost:5002/api/profile`  
+**Endpoint:** `http://localhost:5004/api/profile`  
 **Headers:**
 ```
 x-auth-token: <JWT_TOKEN>
@@ -106,7 +106,7 @@ import 'dart:convert';
 
 Future<Map<String, dynamic>> getProfile(String token) async {
   final response = await http.get(
-    Uri.parse('http://localhost:5002/api/profile'),
+    Uri.parse('http://localhost:5004/api/profile'),
     headers: {
       'x-auth-token': token,
     },
@@ -140,7 +140,7 @@ void loadProfile() async {
 ### Request
 
 **Method:** `PUT`  
-**Endpoint:** `http://localhost:5002/api/profile`  
+**Endpoint:** `http://localhost:5004/api/profile`  
 **Headers:**
 ```
 Content-Type: application/json
@@ -278,7 +278,7 @@ Future<Map<String, dynamic>> updateProfile({
   if (businessName != null) body['businessName'] = businessName;
 
   final response = await http.put(
-    Uri.parse('http://localhost:5002/api/profile'),
+    Uri.parse('http://localhost:5004/api/profile'),
     headers: {
       'Content-Type': 'application/json',
       'x-auth-token': token,
@@ -380,7 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     
     try {
       final response = await http.get(
-        Uri.parse('http://localhost:5002/api/profile'),
+        Uri.parse('http://localhost:5004/api/profile'),
         headers: {'x-auth-token': widget.authToken},
       );
 
@@ -411,7 +411,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final response = await http.put(
-        Uri.parse('http://localhost:5002/api/profile'),
+        Uri.parse('http://localhost:5004/api/profile'),
         headers: {
           'Content-Type': 'application/json',
           'x-auth-token': widget.authToken,
@@ -532,11 +532,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 ```bash
 # Get profile
-curl -X GET http://localhost:5002/api/profile \
+curl -X GET http://localhost:5004/api/profile \
   -H "x-auth-token: YOUR_TOKEN_HERE"
 
 # Update profile
-curl -X PUT http://localhost:5002/api/profile \
+curl -X PUT http://localhost:5004/api/profile \
   -H "Content-Type: application/json" \
   -H "x-auth-token: YOUR_TOKEN_HERE" \
   -d '{
