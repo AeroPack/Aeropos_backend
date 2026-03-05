@@ -20,7 +20,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "docker-compose.yml,Dockerfile,package.json,package-lock.json,tsconfig.json,src/"
+          source: "docker-compose.yml,Dockerfile,package.json,package-lock.json,tsconfig.json,nodemon.json,src/,migrations/"
           target: "~/my-new-app"
 
       # Write the .env file on the VPS from GitHub Secrets (never commit .env to git)
