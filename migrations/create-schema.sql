@@ -1,5 +1,6 @@
--- Simple schema creation for fresh database
--- This creates all tables from scratch with the new multi-company architecture
+-- Complete schema creation for fresh database
+-- This creates all tables from scratch with the multi-company architecture
+-- Matches the Drizzle ORM schema definitions in src/db/schema/
 
 CREATE TABLE IF NOT EXISTS companies (
     id SERIAL PRIMARY KEY,
@@ -20,14 +21,20 @@ CREATE TABLE IF NOT EXISTS employees (
     uuid UUID DEFAULT gen_random_uuid() NOT NULL UNIQUE,
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
+    password TEXT,
     phone TEXT,
     address TEXT,
     position TEXT,
     salary DOUBLE PRECISION,
     role TEXT DEFAULT 'employee' NOT NULL,
+    google_auth BOOLEAN DEFAULT false NOT NULL,
     is_owner BOOLEAN DEFAULT false NOT NULL,
     company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    is_email_verified BOOLEAN DEFAULT false NOT NULL,
+    email_verification_token TEXT,
+    email_verification_expires TIMESTAMP,
+    password_reset_token TEXT,
+    password_reset_expires TIMESTAMP,
     is_deleted BOOLEAN DEFAULT false NOT NULL,
     created_at TIMESTAMP DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMP DEFAULT NOW() NOT NULL
@@ -180,4 +187,12 @@ CREATE TABLE IF NOT EXISTS tasks (
     due_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+    id SERIAL PRIMARY KEY,
+    role TEXT NOT NULL,
+    permission TEXT NOT NULL,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    UNIQUE(role, permission, company_id)
 );

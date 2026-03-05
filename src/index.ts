@@ -33,11 +33,11 @@ app.use(cors({
     if (!origin) return callback(null, true);
 
 
-const allowedPatterns = [
-  /localhost:\d+$/,
-  /127\.0\.0\.1:\d+$/,
-  /(^|\.)aeropackpos\.in$/  // This matches aeropackpos.in AND *.aeropackpos.in
-];
+    const allowedPatterns = [
+      /localhost:\d+$/,
+      /127\.0\.0\.1:\d+$/,
+      /(^|\.)aeropackpos\.in$/  // This matches aeropackpos.in AND *.aeropackpos.in
+    ];
     const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
 
     if (isAllowed) {

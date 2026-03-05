@@ -1,18 +1,35 @@
 import { db } from "./index";
 import { customers } from "./schema";
 import { eq, and } from "drizzle-orm";
+import { Pool } from "pg";
+import fs from "fs";
+import path from "path";
 
 // Walk-in customer identifier
 const WALK_IN_CUSTOMER_NAME = "Walk-in Customer";
 
 /**
- * Initialize the database with required default data
- * Note: With multi-company architecture, walk-in customers are created per company
- * This function is kept for backward compatibility but doesn't create walk-in customers
+ * Initialize the database with required schema and default data
+ * Runs create-schema.sql to ensure all tables exist (uses IF NOT EXISTS)
  */
 export async function initializeDatabase() {
     try {
         console.log("Initializing database...");
+
+        // Run schema creation SQL
+        const schemaPath = path.join(process.cwd(), "migrations", "create-schema.sql");
+        if (fs.existsSync(schemaPath)) {
+            const schemaSql = fs.readFileSync(schemaPath, "utf-8");
+            const pool = new Pool({
+                connectionString: process.env.DATABASE_URL || "postgresql://postgres:test123@db:5432/mydb",
+            });
+            await pool.query(schemaSql);
+            await pool.end();
+            console.log("Database schema verified/created successfully");
+        } else {
+            console.warn("Warning: migrations/create-schema.sql not found, skipping schema creation");
+        }
+
         console.log("Database initialization complete");
     } catch (error) {
         console.error("Error initializing database:", error);
