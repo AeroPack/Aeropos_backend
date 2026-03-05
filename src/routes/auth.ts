@@ -275,9 +275,15 @@ authRouter.post("/google", async (req, res) => {
         const { idToken, accessToken } = req.body;
 
         if (!idToken && !accessToken) {
-            res.status(400).json({ error: "idToken or accessToken is required" });
+            console.warn("Google Auth attempt without idToken or accessToken");
+            res.status(400).json({
+                error: "Authentication failed",
+                details: "idToken or accessToken is required"
+            });
             return;
         }
+
+        console.log(`Google Auth: testing ${idToken ? 'idToken' : 'accessToken'}`);
 
         let payload: any;
 
@@ -294,7 +300,10 @@ authRouter.post("/google", async (req, res) => {
 
                 // If ID token fails and no access token, fail
                 if (!accessToken) {
-                    res.status(401).json({ error: "Invalid Google ID Token" });
+                    res.status(401).json({
+                        error: "Authentication failed",
+                        details: "Invalid Google ID Token"
+                    });
                     return;
                 }
             }
@@ -313,15 +322,22 @@ authRouter.post("/google", async (req, res) => {
                 }
 
                 payload = await response.json();
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Google verify Access token error:", error);
-                res.status(401).json({ error: "Invalid Google Access Token" });
+                res.status(401).json({
+                    error: "Authentication failed",
+                    details: error.message || "Invalid Google Access Token"
+                });
                 return;
             }
         }
 
         if (!payload || !payload.email) {
-            res.status(400).json({ error: "Invalid Google Token payload" });
+            console.error("Invalid Google Token payload:", JSON.stringify(payload));
+            res.status(400).json({
+                error: "Authentication failed",
+                details: "No email found in Google profile"
+            });
             return;
         }
 
@@ -424,9 +440,12 @@ authRouter.post("/google", async (req, res) => {
             });
         }
 
-    } catch (e) {
+    } catch (e: any) {
         console.error("Google Auth error:", e);
-        res.status(500).json({ error: "Internal server error" });
+        res.status(500).json({
+            error: "Internal server error",
+            details: e.message
+        });
     }
 });
 

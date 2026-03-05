@@ -20,19 +20,27 @@ import roleRouter from "./routes/roles";
 
 const app = express();
 
-// Set COOP header for Google Auth
-app.use((req, res, next) => {
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-  next();
-});
-
-// Logging middleware
+// 1. Logging middleware (at the very top for debugging)
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
 
-app.use(cors());
+// 2. CORS configuration (must be before routes)
+app.use(cors({
+  origin: ["http://localhost:5000", "http://localhost:5001", "https://flutterbackend.aeropackpos.in"],
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept"]
+}));
+
+// 3. Set security headers
+app.use((req, res, next) => {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  next();
+});
+
+// 4. Body parsing middleware
 app.use(express.json());
 // Serve static files from uploads directory
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
@@ -50,7 +58,15 @@ app.use("/api/profile", profileRouter);
 app.use("/api/roles", roleRouter);
 
 app.get("/", (req, res) => {
-  res.send("Welcome to my app!!!!!!!!");
+  res.send("Welcome to Aeropack POS API!");
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.get("/api/test", (req, res) => {

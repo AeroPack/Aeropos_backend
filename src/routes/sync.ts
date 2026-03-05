@@ -82,9 +82,12 @@ syncRouter.post("/", async (req: AuthRequest, res) => {
             serverTime: new Date().toISOString(),
             updates: newUpdates
         });
-    } catch (e) {
+    } catch (e: any) {
         console.error("Sync error:", e);
-        res.status(500).json({ error: e });
+        res.status(500).json({
+            error: "Internal server error during sync",
+            details: e.message
+        });
     }
 });
 
