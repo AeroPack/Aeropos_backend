@@ -28,10 +28,28 @@ app.use((req, res, next) => {
 
 // 2. CORS configuration (must be before routes)
 app.use(cors({
-  origin: ["http://localhost:5000", "http://localhost:5001", "https://flutterbackend.aeropackpos.in"],
+  origin: (origin, callback) => {
+    // Allows requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+
+
+const allowedPatterns = [
+  /localhost:\d+$/,
+  /127\.0\.0\.1:\d+$/,
+  /(^|\.)aeropackpos\.in$/  // This matches aeropackpos.in AND *.aeropackpos.in
+];
+    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked for origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept"]
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With"]
 }));
 
 // 3. Set security headers
