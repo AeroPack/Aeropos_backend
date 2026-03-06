@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import categoryRouter from "./routes/categories";
 import unitRouter from "./routes/units";
 import productRouter from "./routes/products";
@@ -25,14 +26,33 @@ app.use((req, res, next) => {
   next();
 });
 
-// 2. CORS is handled entirely by Nginx (to avoid duplicate headers)
-// Do NOT add cors() middleware here
+// 2. CORS configuration (allowing local and production)
+app.use(cors({
+  origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // allow requests with no origin (like mobile apps)
+    if (!origin) return callback(null, true);
 
-// 3. Set security headers
-app.use((req, res, next) => {
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
-  next();
-});
+    const allowedPatterns = [
+      /^http:\/\/localhost:\d+$/,
+      /^http:\/\/127\.0\.0\.1:\d+$/,
+      /^https:\/\/main\.aeropackpos\.in$/,
+      /^https:\/\/aeropackpos\.in$/
+    ];
+
+    const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked for origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With", "x-auth-token"]
+}));
+
+// 3. Set security headers (Removed COOP header to fix Google Sign-In popup blocking)
 
 // 4. Body parsing middleware
 app.use(express.json());
@@ -68,7 +88,7 @@ app.get("/api/test", (req, res) => {
 });
 
 // Initialize database and start server
-const PORT = process.env.PORT || 5004;
+const PORT = 5004;
 initializeDatabase()
   .then(() => {
     app.listen(Number(PORT), "0.0.0.0", () => {
