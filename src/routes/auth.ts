@@ -545,27 +545,37 @@ authRouter.post("/resend-verification", async (req, res) => {
 
 authRouter.post("/forgot-password", async (req, res) => {
     try {
+        console.log("--- FORGOT PASSWORD REQUEST ---");
+        console.log("Raw body:", req.body);
+
         const email = req.body.email?.toLowerCase();
+        console.log("Processed email (lowercase):", email);
 
         if (!email) {
+            console.log("Error: Email is missing or empty");
             res.status(400).json({ error: "Email is required" });
             return;
         }
 
+        console.log(`Querying database for employee with email: '${email}'`);
         const [employee] = await db
             .select()
             .from(employees)
             .where(eq(employees.email, email));
 
         if (!employee) {
+            console.log(`Result: No employee found with email '${email}'`);
             // Don't reveal if user exists
             res.status(200).json({ message: "If an account with that email exists, a password reset link has been sent." });
             return;
         }
 
+        console.log(`Result: Employee found. ID: ${employee.id}, isDeleted: ${employee.isDeleted}`);
+
         const resetToken = crypto.randomBytes(32).toString('hex');
         const resetExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
+        console.log("Updating database with reset token...");
         await db
             .update(employees)
             .set({
@@ -573,8 +583,11 @@ authRouter.post("/forgot-password", async (req, res) => {
                 passwordResetExpires: resetExpires,
             })
             .where(eq(employees.id, employee.id));
+        console.log("Database updated successfully.");
 
+        console.log("Attempting to send password reset email...");
         await sendPasswordResetEmail(email, resetToken);
+        console.log("Password reset email sent successfully via nodemailer.");
 
         res.status(200).json({ message: "If an account with that email exists, a password reset link has been sent." });
 
