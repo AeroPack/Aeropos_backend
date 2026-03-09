@@ -47,7 +47,6 @@ authRouter.post("/signup", async (req, res) => {
     try {
         const {
             name,
-            email,
             password,
             phone,
             businessName,
@@ -56,6 +55,7 @@ authRouter.post("/signup", async (req, res) => {
             companyPhone,
             companyEmail
         } = req.body;
+        const email = req.body.email?.toLowerCase();
 
         // Validate required fields
         if (!name || !email || !password || !businessName) {
@@ -155,7 +155,8 @@ authRouter.post("/signup", async (req, res) => {
 // Login endpoint
 authRouter.post("/login", async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { password } = req.body;
+        const email = req.body.email?.toLowerCase();
 
         // Validate required fields
         if (!email || !password) {
@@ -341,7 +342,8 @@ authRouter.post("/google", async (req, res) => {
             return;
         }
 
-        const { email, name: payloadName, sub } = payload;
+        const { name: payloadName, sub } = payload;
+        const email = payload.email?.toLowerCase();
         // Use provided name or split email
         const name = payloadName || email.split('@')[0];
 
@@ -494,7 +496,7 @@ authRouter.get("/verify-email", async (req, res) => {
 // Resend Verification Email Endpoint
 authRouter.post("/resend-verification", async (req, res) => {
     try {
-        const { email } = req.body;
+        const email = req.body.email?.toLowerCase();
 
         if (!email) {
             res.status(400).json({ error: "Email is required" });
@@ -543,7 +545,7 @@ authRouter.post("/resend-verification", async (req, res) => {
 
 authRouter.post("/forgot-password", async (req, res) => {
     try {
-        const { email } = req.body;
+        const email = req.body.email?.toLowerCase();
 
         if (!email) {
             res.status(400).json({ error: "Email is required" });
