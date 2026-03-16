@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
 
+console.log(`[Email Service] Initializing with host: ${process.env.EMAIL_HOST}, port: ${process.env.EMAIL_PORT}, user: ${process.env.EMAIL_USERNAME}`);
+
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: parseInt(process.env.EMAIL_PORT || '587'),
@@ -8,6 +10,15 @@ const transporter = nodemailer.createTransport({
         user: process.env.EMAIL_USERNAME,
         pass: process.env.EMAIL_PASSWORD,
     },
+});
+
+// Verify connection configuration
+transporter.verify(function (error, success) {
+    if (error) {
+        console.error('[Email Service] SMTP Connection Error:', error);
+    } else {
+        console.log("[Email Service] SMTP Server is ready to take our messages");
+    }
 });
 
 export const sendVerificationEmail = async (email: string, token: string) => {
@@ -62,11 +73,15 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
         `,
     };
 
+    console.log(`[Email Service] Attempting to send reset email to: ${email}`);
+    console.log(`[Email Service] Using Reset URL: ${resetUrl}`);
+
     try {
-        await transporter.sendMail(mailOptions);
-        console.log(`Password reset email sent to ${email}`);
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[Email Service] Password reset email sent to ${email}`);
+        console.log(`[Email Service] Response: ${info.response}`);
     } catch (error) {
-        console.error('Error sending password reset email:', error);
+        console.error('[Email Service] Error sending password reset email:', error);
         throw new Error('Failed to send password reset email');
     }
 };

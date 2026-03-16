@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS companies (
     phone TEXT,
     email TEXT,
     logo_url TEXT,
+    created_by_employee_id INTEGER,
     is_deleted BOOLEAN DEFAULT false NOT NULL,
     created_at TIMESTAMP DEFAULT NOW() NOT NULL,
     updated_at TIMESTAMP DEFAULT NOW() NOT NULL
@@ -20,7 +21,7 @@ CREATE TABLE IF NOT EXISTS employees (
     id SERIAL PRIMARY KEY,
     uuid UUID DEFAULT gen_random_uuid() NOT NULL UNIQUE,
     name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
     password TEXT,
     phone TEXT,
     address TEXT,
@@ -37,7 +38,8 @@ CREATE TABLE IF NOT EXISTS employees (
     password_reset_expires TIMESTAMP,
     is_deleted BOOLEAN DEFAULT false NOT NULL,
     created_at TIMESTAMP DEFAULT NOW() NOT NULL,
-    updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    updated_at TIMESTAMP DEFAULT NOW() NOT NULL,
+    UNIQUE(email, company_id)
 );
 
 CREATE TABLE IF NOT EXISTS categories (

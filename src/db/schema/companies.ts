@@ -1,4 +1,4 @@
-import { pgTable, text, uuid, timestamp, serial, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, serial, boolean, integer } from "drizzle-orm/pg-core";
 
 export const companies = pgTable("companies", {
     id: serial("id").primaryKey(),
@@ -8,7 +8,8 @@ export const companies = pgTable("companies", {
     taxId: text("tax_id"),
     phone: text("phone"),
     email: text("email"), // Company contact email
-    logoUrl: text("logo_url"), // Company logo (renamed from profileImage)
+    logoUrl: text("logo_url"), // Company logo
+    createdByEmployeeId: integer("created_by_employee_id"), // Owner/creator employee ID (nullable for legacy)
     isDeleted: boolean("is_deleted").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),

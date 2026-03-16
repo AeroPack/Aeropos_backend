@@ -11,6 +11,7 @@ import { and } from "drizzle-orm";
 import { getDefaultPermissions } from "../config/rbac";
 import crypto from 'crypto';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email';
+import { syncEmployeeAuthFields } from '../services/auth-sync';
 import { gt } from "drizzle-orm";
 
 const authRouter = Router();
@@ -133,6 +134,12 @@ authRouter.post("/signup", async (req, res) => {
         // Send verification email
         await sendVerificationEmail(email, verificationToken);
 
+        // Set company ownership
+        await db
+            .update(companies)
+            .set({ createdByEmployeeId: createdEmployee.id })
+            .where(eq(companies.id, createdCompany.id));
+
         // Generate JWT token
         const token = jwt.sign({ id: createdEmployee.uuid }, JWT_SECRET);
 
@@ -152,10 +159,12 @@ authRouter.post("/signup", async (req, res) => {
     }
 });
 
-// Login endpoint
+// Login endpoint - handles multi-company
 authRouter.post("/login", async (req, res) => {
+    console.log("--- LOGIN ATTEMPT ---");
     try {
-        const { password } = req.body;
+        console.log("Request body:", JSON.stringify(req.body));
+        const { password, companyId } = req.body;
         const email = req.body.email?.toLowerCase();
 
         // Validate required fields
@@ -164,65 +173,105 @@ authRouter.post("/login", async (req, res) => {
             return;
         }
 
-        // Find employee by email
-        const [employee] = await db
+        console.log(`Searching for employees with email: ${email}`);
+        // Find ALL non-deleted employees with this email
+        const matchingEmployees = await db
             .select()
             .from(employees)
-            .where(eq(employees.email, email));
+            .where(
+                and(
+                    eq(employees.email, email),
+                    eq(employees.isDeleted, false)
+                )
+            );
+        console.log(`Found ${matchingEmployees.length} matching employees`);
 
-        if (!employee) {
+        if (matchingEmployees.length === 0) {
             res.status(401).json({ error: "Invalid email or password" });
             return;
         }
 
-        // Check if employee is deleted
-        if (employee.isDeleted) {
-            res.status(401).json({ error: "Account has been deleted" });
-            return;
+        // Verify password against EACH employee individually (handles temporary desync)
+        const validEmployees = [];
+        for (const emp of matchingEmployees) {
+            if (!emp.password) continue;
+            const isValid = await bcrypt.compare(password, emp.password);
+            if (isValid) {
+                validEmployees.push(emp);
+            }
         }
 
-        // Verify password
-        if (!employee.password) {
+        if (validEmployees.length === 0) {
             res.status(401).json({ error: "Invalid email or password" });
             return;
         }
 
-        const isPasswordValid = await bcrypt.compare(password, employee.password);
-
-        if (!isPasswordValid) {
-            res.status(401).json({ error: "Invalid email or password" });
-            return;
+        // If companyId is specified, select that company directly
+        if (companyId) {
+            const targetEmployee = validEmployees.find(e => e.companyId === companyId);
+            if (!targetEmployee) {
+                res.status(403).json({ error: "You do not have access to this company" });
+                return;
+            }
+            return await respondWithEmployeeLogin(targetEmployee, res);
         }
 
-        // Get company details
-        const [company] = await db
-            .select()
-            .from(companies)
-            .where(eq(companies.id, employee.companyId));
-
-        if (!company) {
-            res.status(500).json({ error: "Company not found" });
-            return;
+        // Single company — login directly
+        if (validEmployees.length === 1) {
+            return await respondWithEmployeeLogin(validEmployees[0], res);
         }
 
-        // Generate JWT token
-        const token = jwt.sign({ id: employee.uuid }, JWT_SECRET);
-
-        // Remove password from response
-        const { password: _, ...employeeWithoutPassword } = employee;
-
-        const permissions = await getUserPermissions(employee.role, employee.companyId);
+        // Multiple companies — return company list for selection
+        const companyList = [];
+        for (const emp of validEmployees) {
+            const [company] = await db
+                .select()
+                .from(companies)
+                .where(eq(companies.id, emp.companyId));
+            if (company && !company.isDeleted) {
+                companyList.push({
+                    id: company.id,
+                    uuid: company.uuid,
+                    businessName: company.businessName,
+                    logoUrl: company.logoUrl,
+                    role: emp.role,
+                    isOwner: emp.isOwner,
+                });
+            }
+        }
 
         res.status(200).json({
-            employee: { ...employeeWithoutPassword, permissions },
-            company: company,
-            token,
+            requiresCompanySelection: true,
+            companies: companyList,
         });
     } catch (e) {
         console.error("Login error:", e);
         res.status(500).json({ error: "Internal server error" });
     }
 });
+
+// Helper: respond with full login payload for a specific employee
+async function respondWithEmployeeLogin(employee: any, res: any) {
+    const [company] = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, employee.companyId));
+
+    if (!company) {
+        res.status(500).json({ error: "Company not found" });
+        return;
+    }
+
+    const token = jwt.sign({ id: employee.uuid }, JWT_SECRET);
+    const { password: _, ...employeeWithoutPassword } = employee;
+    const permissions = await getUserPermissions(employee.role, employee.companyId);
+
+    res.status(200).json({
+        employee: { ...employeeWithoutPassword, permissions },
+        company: company,
+        token,
+    });
+}
 
 // Get current employee endpoint (protected)
 authRouter.get("/me", auth, async (req: AuthRequest, res) => {
@@ -346,51 +395,72 @@ authRouter.post("/google", async (req, res) => {
         const email = payload.email?.toLowerCase();
         // Use provided name or split email
         const name = payloadName || email.split('@')[0];
+        const { companyId: requestedCompanyId } = req.body;
 
-        // Check if employee exists
-        const [existingEmployee] = await db
+        // Check if any employees exist with this email
+        const existingEmployees = await db
             .select()
             .from(employees)
-            .where(eq(employees.email, email));
+            .where(
+                and(
+                    eq(employees.email, email),
+                    eq(employees.isDeleted, false)
+                )
+            );
 
-        if (existingEmployee) {
-            // Login flow
-            if (existingEmployee.isDeleted) {
-                res.status(401).json({ error: "Account has been deleted" });
-                return;
+        if (existingEmployees.length > 0) {
+            // Login flow — existing user
+
+            // Ensure email is verified for all matching records
+            for (const emp of existingEmployees) {
+                if (!emp.isEmailVerified) {
+                    await db
+                        .update(employees)
+                        .set({ isEmailVerified: true })
+                        .where(eq(employees.id, emp.id));
+                }
             }
 
-            // Ensure email is verified if logging in with Google
-            if (!existingEmployee.isEmailVerified) {
-                await db
-                    .update(employees)
-                    .set({ isEmailVerified: true })
-                    .where(eq(employees.id, existingEmployee.id));
-                existingEmployee.isEmailVerified = true;
+            // If companyId specified, select that company directly
+            if (requestedCompanyId) {
+                const targetEmployee = existingEmployees.find(e => e.companyId === requestedCompanyId);
+                if (!targetEmployee) {
+                    res.status(403).json({ error: "You do not have access to this company" });
+                    return;
+                }
+                return await respondWithEmployeeLogin(targetEmployee, res);
             }
 
-            const [company] = await db
-                .select()
-                .from(companies)
-                .where(eq(companies.id, existingEmployee.companyId));
-
-            if (!company) {
-                res.status(500).json({ error: "Company not found" });
-                return;
+            // Single company — login directly
+            if (existingEmployees.length === 1) {
+                return await respondWithEmployeeLogin(existingEmployees[0], res);
             }
 
-            const token = jwt.sign({ id: existingEmployee.uuid }, JWT_SECRET);
-            const { password: _, ...employeeWithoutPassword } = existingEmployee;
-            const permissions = await getUserPermissions(existingEmployee.role, existingEmployee.companyId);
+            // Multiple companies — return company list for selection
+            const companyList = [];
+            for (const emp of existingEmployees) {
+                const [company] = await db
+                    .select()
+                    .from(companies)
+                    .where(eq(companies.id, emp.companyId));
+                if (company && !company.isDeleted) {
+                    companyList.push({
+                        id: company.id,
+                        uuid: company.uuid,
+                        businessName: company.businessName,
+                        logoUrl: company.logoUrl,
+                        role: emp.role,
+                        isOwner: emp.isOwner,
+                    });
+                }
+            }
 
             res.status(200).json({
-                employee: { ...employeeWithoutPassword, permissions },
-                company,
-                token,
+                requiresCompanySelection: true,
+                companies: companyList,
             });
         } else {
             // Signup flow (New User)
-            // Create a default company
             const businessName = `${name}'s Company`;
 
             const newCompany: NewCompany = {
@@ -398,7 +468,7 @@ authRouter.post("/google", async (req, res) => {
                 businessAddress: null,
                 taxId: null,
                 phone: null,
-                email: email, // Use user email for company contact
+                email: email,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
@@ -408,8 +478,6 @@ authRouter.post("/google", async (req, res) => {
                 .values(newCompany)
                 .returning();
 
-            // Create owner employee with random password
-            // Generate a random password since it's required but won't be used for Google Auth
             const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
             const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
@@ -421,7 +489,7 @@ authRouter.post("/google", async (req, res) => {
                 companyId: createdCompany.id,
                 role: "admin",
                 isOwner: true,
-                isEmailVerified: true, // Auto-verify email for Google Sign-In
+                isEmailVerified: true,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
@@ -430,6 +498,12 @@ authRouter.post("/google", async (req, res) => {
                 .insert(employees)
                 .values(newEmployee)
                 .returning();
+
+            // Set company ownership
+            await db
+                .update(companies)
+                .set({ createdByEmployeeId: createdEmployee.id })
+                .where(eq(companies.id, createdCompany.id));
 
             const token = jwt.sign({ id: createdEmployee.uuid }, JWT_SECRET);
             const { password: _, ...employeeWithoutPassword } = createdEmployee;
@@ -637,6 +711,13 @@ authRouter.post("/reset-password", async (req, res) => {
                 passwordResetExpires: null,
             })
             .where(eq(employees.id, employee.id));
+
+        // Sync password to all mirror employee records
+        await syncEmployeeAuthFields(employee.id, employee.email, {
+            password: hashedPassword,
+            passwordResetToken: null,
+            passwordResetExpires: null,
+        });
 
         res.status(200).json({ message: "Password reset successfully" });
 

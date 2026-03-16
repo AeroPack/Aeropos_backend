@@ -12,6 +12,7 @@ import customerRouter from "./routes/customers";
 import supplierRouter from "./routes/suppliers";
 import employeeRouter from "./routes/employees";
 import profileRouter from "./routes/profile";
+import companyRouter from "./routes/companies";
 import { initializeDatabase } from "./db/seed";
 
 import path from "path";
@@ -70,6 +71,7 @@ app.use("/api/invoices", invoiceRouter);
 app.use("/api/sync", syncRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/roles", roleRouter);
+app.use("/api/companies", companyRouter);
 
 app.get("/", (req, res) => {
   res.send("Welcome to Aeropack POS API!");

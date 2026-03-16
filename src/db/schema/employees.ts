@@ -1,11 +1,11 @@
-import { pgTable, text, uuid, timestamp, serial, boolean, doublePrecision, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, uuid, timestamp, serial, boolean, doublePrecision, integer, uniqueIndex } from "drizzle-orm/pg-core";
 import { companies } from "./companies";
 
 export const employees = pgTable("employees", {
     id: serial("id").primaryKey(),
     uuid: uuid("uuid").defaultRandom().notNull().unique(),
     name: text("name").notNull(),
-    email: text("email").unique().notNull(), // For authentication
+    email: text("email").notNull(), // No longer globally unique — unique per company
     password: text("password"), // Hashed password (nullable for Google Auth employees)
     phone: text("phone"),
     address: text("address"),
@@ -27,7 +27,9 @@ export const employees = pgTable("employees", {
     isDeleted: boolean("is_deleted").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+    uniqueIndex("employees_email_company_id_unique").on(table.email, table.companyId),
+]);
 
 export type Employee = typeof employees.$inferSelect;
 export type NewEmployee = typeof employees.$inferInsert;

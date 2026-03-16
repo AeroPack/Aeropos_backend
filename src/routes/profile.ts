@@ -4,6 +4,7 @@ import { employees, companies } from "../db/schema";
 import { eq, and, ne } from "drizzle-orm";
 import { auth, AuthRequest } from "../middleware/auth";
 import { uploadProfileImage } from "../middleware/upload";
+import { syncEmployeeAuthFields } from "../services/auth-sync";
 import fs from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
@@ -152,6 +153,13 @@ profileRouter.put("/", auth, async (req: AuthRequest, res) => {
                 .set(employeeUpdateData)
                 .where(eq(employees.id, req.employeeId))
                 .returning();
+
+            // Sync password to mirror employee records if password was changed
+            if (employeeUpdateData.password) {
+                await syncEmployeeAuthFields(req.employeeId, currentEmployee.email, {
+                    password: employeeUpdateData.password,
+                });
+            }
         }
 
         // Update company if any company field is provided
