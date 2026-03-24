@@ -6,7 +6,7 @@ export default defineConfig({
   out: "./src/drizzle",
   dbCredentials: {
     host: "localhost",
-    port: 5432,
+    port: 5435,
     database: "mydb",
     user: "postgres",
     password: "test123",

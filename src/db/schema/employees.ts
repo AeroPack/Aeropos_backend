@@ -12,6 +12,7 @@ export const employees = pgTable("employees", {
     position: text("position"),
     salary: doublePrecision("salary"),
     role: text("role").default("employee").notNull(), // admin, manager, employee
+    avatarUrl: text("avatar_url"), // User profile picture
     googleAuth: boolean("google_auth").default(false).notNull(), // True if employee was added via Google Auth (no password)
     isOwner: boolean("is_owner").default(false).notNull(), // Company owner flag
     companyId: integer("company_id") // Renamed from tenantId

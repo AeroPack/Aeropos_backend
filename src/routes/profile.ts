@@ -71,6 +71,8 @@ profileRouter.get("/", auth, async (req: AuthRequest, res) => {
 
             profileImage: company.logoUrl, // Map company logo to profileImage
             imageUrl: company.logoUrl, // Alias for compatibility
+            logoUrl: company.logoUrl,
+            userImage: employee.avatarUrl, // New user avatar field
         });
     } catch (e) {
         console.error("Get profile error:", e);
@@ -220,6 +222,8 @@ profileRouter.put("/", auth, async (req: AuthRequest, res) => {
 
             profileImage: updatedCompany.logoUrl,
             imageUrl: updatedCompany.logoUrl,
+            logoUrl: updatedCompany.logoUrl,
+            userImage: updatedEmployee.avatarUrl,
         });
     } catch (e) {
         console.error("Update profile error:", e);
@@ -277,81 +281,113 @@ profileRouter.put("/company", auth, async (req: AuthRequest, res) => {
     }
 });
 
-// POST /api/profile/upload-image - Upload company logo (admin only)
+// POST /api/profile/upload-image - Upload company logo (DEPRECATED: Use /upload-logo or /upload-avatar)
 profileRouter.post("/upload-image", auth, uploadProfileImage.single("image"), async (req: AuthRequestWithFile, res) => {
+    // Redirect logic to /upload-logo for backward compatibility
+    console.log("DEPRECATED: POST /api/profile/upload-image called. Redirecting logic to upload-logo.");
+    return await handleFileUpload(req, res, "logo");
+});
+
+// POST /api/profile/upload-logo - Upload company logo (admin only)
+profileRouter.post("/upload-logo", auth, uploadProfileImage.single("image"), async (req: AuthRequestWithFile, res) => {
+    return await handleFileUpload(req, res, "logo");
+});
+
+// POST /api/profile/upload-avatar - Upload user profile picture
+profileRouter.post("/upload-avatar", auth, uploadProfileImage.single("image"), async (req: AuthRequestWithFile, res) => {
+    return await handleFileUpload(req, res, "avatar");
+});
+
+// Shared handler for file uploads
+const handleFileUpload = async (req: AuthRequestWithFile, res: any, target: "logo" | "avatar") => {
     try {
         if (!req.employeeId || !req.companyId) {
-            res.status(401).json({ error: "Unauthorized" });
-            return;
+            return res.status(401).json({ error: "Unauthorized" });
         }
 
-        // Check if employee is admin or owner
-        const [employee] = await db
-            .select()
-            .from(employees)
-            .where(eq(employees.id, req.employeeId));
+        if (target === "logo") {
+            // Check if employee is admin or owner
+            const [employee] = await db
+                .select()
+                .from(employees)
+                .where(eq(employees.id, req.employeeId));
 
-        if (!employee || (employee.role !== "admin" && !employee.isOwner)) {
-            res.status(403).json({ error: "Only admins can update company logo" });
-            return;
+            if (!employee || (employee.role !== "admin" && !employee.isOwner)) {
+                return res.status(403).json({ error: "Only admins can update company logo" });
+            }
         }
 
         if (!req.file) {
-            res.status(400).json({ error: "No file uploaded" });
-            return;
+            return res.status(400).json({ error: "No file uploaded" });
         }
 
-        // Get current company to delete old logo if exists
-        const [currentCompany] = await db
-            .select()
-            .from(companies)
-            .where(eq(companies.id, req.companyId));
-
-        if (!currentCompany) {
-            res.status(404).json({ error: "Company not found" });
-            return;
-        }
-
-        // Delete old logo if exists
-        if (currentCompany.logoUrl) {
-            const oldImagePath = path.join(process.cwd(), currentCompany.logoUrl);
-            if (fs.existsSync(oldImagePath)) {
-                try {
-                    fs.unlinkSync(oldImagePath);
-                } catch (err) {
-                    console.error("Error deleting old image:", err);
-                }
-            }
-        }
-
-        // Save file path to database (relative path)
         const imagePath = `/uploads/profiles/${req.file.filename}`;
 
-        const [updatedCompany] = await db
-            .update(companies)
-            .set({
-                logoUrl: imagePath,
-                updatedAt: new Date(),
-            })
-            .where(eq(companies.id, req.companyId))
-            .returning();
+        if (target === "logo") {
+            const [currentCompany] = await db
+                .select()
+                .from(companies)
+                .where(eq(companies.id, req.companyId));
 
-        res.status(200).json({
-            message: "Company logo uploaded successfully",
-            company: updatedCompany,
-            imageUrl: imagePath,
-        });
+            if (!currentCompany) return res.status(404).json({ error: "Company not found" });
+
+            // Delete old logo
+            if (currentCompany.logoUrl) {
+                const oldImagePath = path.join(process.cwd(), currentCompany.logoUrl);
+                if (fs.existsSync(oldImagePath) && !currentCompany.logoUrl.startsWith("http")) {
+                    try { fs.unlinkSync(oldImagePath); } catch (e) { console.error(e); }
+                }
+            }
+
+            const [updatedCompany] = await db
+                .update(companies)
+                .set({ logoUrl: imagePath, updatedAt: new Date() })
+                .where(eq(companies.id, req.companyId))
+                .returning();
+
+            return res.status(200).json({
+                message: "Company logo uploaded successfully",
+                imageUrl: imagePath,
+                logoUrl: imagePath,
+                company: updatedCompany,
+            });
+        } else {
+            const [currentEmployee] = await db
+                .select()
+                .from(employees)
+                .where(eq(employees.id, req.employeeId));
+
+            if (!currentEmployee) return res.status(404).json({ error: "Employee not found" });
+
+            // Delete old avatar
+            if (currentEmployee.avatarUrl) {
+                const oldImagePath = path.join(process.cwd(), currentEmployee.avatarUrl);
+                if (fs.existsSync(oldImagePath) && !currentEmployee.avatarUrl.startsWith("http")) {
+                    try { fs.unlinkSync(oldImagePath); } catch (e) { console.error(e); }
+                }
+            }
+
+            const [updatedEmployee] = await db
+                .update(employees)
+                .set({ avatarUrl: imagePath, updatedAt: new Date() })
+                .where(eq(employees.id, req.employeeId))
+                .returning();
+
+            return res.status(200).json({
+                message: "User avatar uploaded successfully",
+                imageUrl: imagePath,
+                avatarUrl: imagePath,
+                employee: updatedEmployee,
+            });
+        }
     } catch (e) {
-        console.error("Upload image error:", e);
-        // Delete uploaded file if database update fails
+        console.error("Upload error:", e);
         if (req.file) {
             const filePath = path.join(process.cwd(), "uploads/profiles", req.file.filename);
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
+            if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         }
-        res.status(500).json({ error: "Internal server error" });
+        return res.status(500).json({ error: "Internal server error" });
     }
-});
+};
 
 export default profileRouter;
