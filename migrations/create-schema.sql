@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS employees (
     position TEXT,
     salary DOUBLE PRECISION,
     role TEXT DEFAULT 'employee' NOT NULL,
+    avatar_url TEXT,
     google_auth BOOLEAN DEFAULT false NOT NULL,
     is_owner BOOLEAN DEFAULT false NOT NULL,
     company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
