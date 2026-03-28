@@ -92,7 +92,7 @@ authRouter.post("/signup", async (req, res) => {
         // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // Create new company
+        // Create new company 1
         const newCompany: NewCompany = {
             businessName,
             businessAddress: businessAddress || null,
