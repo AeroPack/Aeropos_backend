@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
 
+dotenv.config();
 console.log(`[Email Service] Initializing with host: ${process.env.EMAIL_HOST}, port: ${process.env.EMAIL_PORT}, user: ${process.env.EMAIL_USERNAME}`);
 
 const transporter = nodemailer.createTransport({
@@ -28,7 +30,7 @@ export const sendVerificationEmail = async (email: string, token: string) => {
         return;
     }
 
-    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
+    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/verify-email?token=${token}`;
 
     const mailOptions = {
         from: `"Support Team" <${process.env.EMAIL_USERNAME}>`,
@@ -58,7 +60,7 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
         return;
     }
 
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:5000'}/reset-password?token=${token}`;
 
     const mailOptions = {
         from: `"Support Team" <${process.env.EMAIL_USERNAME}>`,

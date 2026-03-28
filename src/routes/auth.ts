@@ -13,7 +13,9 @@ import crypto from 'crypto';
 import { sendVerificationEmail, sendPasswordResetEmail } from '../services/email';
 import { syncEmployeeAuthFields } from '../services/auth-sync';
 import { gt } from "drizzle-orm";
+import dotenv from "dotenv";
 
+dotenv.config();
 const authRouter = Router();
 
 // JWT Secret - using environment variable with fallback
