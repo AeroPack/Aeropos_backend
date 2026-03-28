@@ -90,7 +90,7 @@ app.get("/api/test", (req, res) => {
 });
 
 // Initialize database and start server
-const PORT = 5004;
+const PORT = process.env.PORT || 5005;
 initializeDatabase()
   .then(() => {
     app.listen(Number(PORT), "0.0.0.0", () => {
