@@ -199,3 +199,9 @@ CREATE TABLE IF NOT EXISTS role_permissions (
     company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
     UNIQUE(role, permission, company_id)
 );
+
+-- Ensure missing columns exist in existing tables (for legacy updates)
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS created_by_employee_id INTEGER;
+ALTER TABLE employees DROP CONSTRAINT IF EXISTS employees_email_unique;
+
