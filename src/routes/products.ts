@@ -63,76 +63,85 @@ productRouter.get("/:uuid", checkPermission('VIEW_PRODUCTS'), async (req: AuthRe
 
 productRouter.post("/", checkPermission('MANAGE_PRODUCTS'), async (req: AuthRequest, res) => {
     try {
-        const { uuid, unitUuid, categoryUuid, brandUuid, ...rest } = req.body;
-        let unitId = rest.unitId;
-        let categoryId = rest.categoryId;
-        let brandId = rest.brandId;
+        const isArray = Array.isArray(req.body);
+        const productData = isArray ? req.body : [req.body];
+        const results = [];
 
-        if (unitUuid) {
-            const [unit] = await db
-                .select({ id: units.id })
-                .from(units)
-                .where(and(eq(units.uuid, unitUuid), eq(units.companyId, req.companyId!)));
-            if (unit) unitId = unit.id;
-        }
+        for (const item of productData) {
+            const { uuid, unitUuid, categoryUuid, brandUuid, ...rest } = item;
+            let unitId = rest.unitId;
+            let categoryId = rest.categoryId;
+            let brandId = rest.brandId;
 
-        if (categoryUuid) {
-            const [category] = await db
-                .select({ id: categories.id })
-                .from(categories)
-                .where(and(eq(categories.uuid, categoryUuid), eq(categories.companyId, req.companyId!)));
-            if (category) categoryId = category.id;
-        }
-
-        if (brandUuid) {
-            const [brand] = await db
-                .select({ id: brands.id })
-                .from(brands)
-                .where(and(eq(brands.uuid, brandUuid), eq(brands.companyId, req.companyId!)));
-            if (brand) brandId = brand.id;
-        }
-
-        // Upsert by UUID: if product with this UUID already exists for this company, update it
-        if (uuid) {
-            const [existing] = await db
-                .select()
-                .from(products)
-                .where(and(eq(products.uuid, uuid), eq(products.companyId, req.companyId!)));
-
-            if (existing) {
-                const updateData: Partial<NewProduct> = {
-                    ...rest,
-                    ...(unitId !== undefined && { unitId }),
-                    ...(categoryId !== undefined && { categoryId }),
-                    ...(brandId !== undefined && { brandId }),
-                    updatedAt: new Date(),
-                };
-                const [updated] = await db
-                    .update(products)
-                    .set(updateData)
-                    .where(and(eq(products.uuid, uuid), eq(products.companyId, req.companyId!)))
-                    .returning();
-                res.status(200).json(updated);
-                return;
+            if (unitUuid) {
+                const [unit] = await db
+                    .select({ id: units.id })
+                    .from(units)
+                    .where(and(eq(units.uuid, unitUuid), eq(units.companyId, req.companyId!)));
+                if (unit) unitId = unit.id;
             }
+
+            if (categoryUuid) {
+                const [category] = await db
+                    .select({ id: categories.id })
+                    .from(categories)
+                    .where(and(eq(categories.uuid, categoryUuid), eq(categories.companyId, req.companyId!)));
+                if (category) categoryId = category.id;
+            }
+
+            if (brandUuid) {
+                const [brand] = await db
+                    .select({ id: brands.id })
+                    .from(brands)
+                    .where(and(eq(brands.uuid, brandUuid), eq(brands.companyId, req.companyId!)));
+                if (brand) brandId = brand.id;
+            }
+
+            // Upsert by UUID: if product with this UUID already exists for this company, update it
+            if (uuid) {
+                const [existing] = await db
+                    .select()
+                    .from(products)
+                    .where(and(eq(products.uuid, uuid), eq(products.companyId, req.companyId!)));
+
+                if (existing) {
+                    const updateData: Partial<NewProduct> = {
+                        ...rest,
+                        ...(unitId !== undefined && { unitId }),
+                        ...(categoryId !== undefined && { categoryId }),
+                        ...(brandId !== undefined && { brandId }),
+                        updatedAt: new Date(),
+                    };
+                    const [updated] = await db
+                        .update(products)
+                        .set(updateData)
+                        .where(and(eq(products.uuid, uuid), eq(products.companyId, req.companyId!)))
+                        .returning();
+                    results.push(updated);
+                    continue;
+                }
+            }
+
+            const newProduct: NewProduct = {
+                ...rest,
+                ...(uuid ? { uuid } : {}),
+                unitId,
+                categoryId,
+                brandId,
+                companyId: req.companyId!,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            const [createdProduct] = await db
+                .insert(products)
+                .values(newProduct)
+                .returning();
+            results.push(createdProduct);
         }
 
-        const newProduct: NewProduct = {
-            ...rest,
-            ...(uuid ? { uuid } : {}),
-            unitId,
-            categoryId,
-            brandId,
-            companyId: req.companyId!,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-        const [createdProduct] = await db
-            .insert(products)
-            .values(newProduct)
-            .returning();
-        res.status(201).json(createdProduct);
+        res.status(isArray ? 200 : (results.length > 0 ? 201 : 200)).json(isArray ? results : results[0]);
     } catch (e) {
+        console.error("Product POST error:", e);
         res.status(500).json({ error: e });
     }
 });

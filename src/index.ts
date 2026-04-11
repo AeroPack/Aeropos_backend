@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import compression from "compression";
 import categoryRouter from "./routes/categories";
 import unitRouter from "./routes/units";
 import productRouter from "./routes/products";
@@ -18,19 +19,18 @@ import { initializeDatabase } from "./db/seed";
 import path from "path";
 
 import roleRouter from "./routes/roles";
+import stockSyncRouter from "./routes/stock";
+import healthRouter from "./routes/health";
 
 const app = express();
 
-// 1. Logging middleware (at the very top for debugging)
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
 
-// 2. CORS configuration (allowing local and production)
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-    // allow requests with no origin (like mobile apps)
     if (!origin) return callback(null, true);
 
     const allowedPatterns = [
@@ -53,12 +53,16 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With", "x-auth-token"]
 }));
 
-// 3. Set security headers (Removed COOP header to fix Google Sign-In popup blocking)
+app.use(compression({
+  threshold: 10240, // 10KB - only compress if larger
+  level: 6, // good balance of speed and compression
+}));
 
-// 4. Body parsing middleware
-app.use(express.json());
-// Serve static files from uploads directory
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+
+app.use("/health", healthRouter);
 app.use("/api/auth", authRouter);
 app.use("/api/categories", categoryRouter);
 app.use("/api/units", unitRouter);
@@ -69,6 +73,7 @@ app.use("/api/suppliers", supplierRouter);
 app.use("/api/employees", employeeRouter);
 app.use("/api/invoices", invoiceRouter);
 app.use("/api/sync", syncRouter);
+app.use("/api/sync/stock", stockSyncRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/roles", roleRouter);
 app.use("/api/companies", companyRouter);
@@ -89,7 +94,6 @@ app.get("/api/test", (req, res) => {
   res.json({ message: "API is working", time: new Date().toISOString() });
 });
 
-// Initialize database and start server
 const PORT = process.env.PORT || 5005;
 initializeDatabase()
   .then(() => {

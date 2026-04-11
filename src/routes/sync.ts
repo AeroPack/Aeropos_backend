@@ -1,94 +1,100 @@
-import { Router } from "express";
-import { db } from "../db";
-import {
-    products, categories, units, brands, customers, invoices, invoiceItems, employees, suppliers,
-} from "../db/schema";
-import { eq, and, gt } from "drizzle-orm";
-import { auth, AuthRequest } from "../middleware/auth";
+import { Router, Response } from "express";
+import { authMiddleware, requireTenant } from "../middleware/auth-sync";
+import { processOperations, getServerChanges } from "../services/operations";
+import { syncRequestSchema, pullRequestSchema } from "../validators/sync";
+import type { AuthRequest } from "../types/sync";
 
-const syncRouter = Router();
+const router = Router();
 
-// All sync routes require authentication
-syncRouter.use(auth);
+router.use(authMiddleware);
+router.use(requireTenant);
 
-syncRouter.post("/", async (req: AuthRequest, res) => {
-    console.log(`Sync request received for company: ${req.companyId}`);
-    try {
-        const { lastSyncTime, changes } = req.body;
-        const lastSync = lastSyncTime ? new Date(lastSyncTime) : new Date(0);
+router.post("/", async (req: AuthRequest, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
 
-        // This is a simplified batch sync. 
-        // In a real scenario, you'd iterate through 'changes' and apply them.
-        // For this prompt, we'll focus on returning server-side updates since lastSync.
+    const isPullOnly = !req.body.operations || req.body.operations.length === 0;
 
-        const newUpdates = {
-            products: await db.select().from(products).where(
-                and(
-                    eq(products.companyId, req.companyId!),
-                    gt(products.updatedAt, lastSync)
-                )
-            ),
-            categories: await db.select().from(categories).where(
-                and(
-                    eq(categories.companyId, req.companyId!),
-                    gt(categories.updatedAt, lastSync)
-                )
-            ),
-            units: await db.select().from(units).where(
-                and(
-                    eq(units.companyId, req.companyId!),
-                    gt(units.updatedAt, lastSync)
-                )
-            ),
-            brands: await db.select().from(brands).where(
-                and(
-                    eq(brands.companyId, req.companyId!),
-                    gt(brands.updatedAt, lastSync)
-                )
-            ),
-            customers: await db.select().from(customers).where(
-                and(
-                    eq(customers.companyId, req.companyId!),
-                    gt(customers.updatedAt, lastSync)
-                )
-            ),
-            invoices: await db.select().from(invoices).where(
-                and(
-                    eq(invoices.companyId, req.companyId!),
-                    gt(invoices.updatedAt, lastSync)
-                )
-            ),
-            invoiceItems: await db.select().from(invoiceItems).where(
-                and(
-                    eq(invoiceItems.companyId, req.companyId!),
-                    gt(invoiceItems.createdAt, lastSync)
-                )
-            ),
-            employees: await db.select().from(employees).where(
-                and(
-                    eq(employees.companyId, req.companyId!),
-                    gt(employees.updatedAt, lastSync)
-                )
-            ),
-            suppliers: await db.select().from(suppliers).where(
-                and(
-                    eq(suppliers.companyId, req.companyId!),
-                    gt(suppliers.updatedAt, lastSync)
-                )
-            ),
-        };
+    if (isPullOnly) {
+      const pullValidation = pullRequestSchema.safeParse({
+        tenant_id: tenantId,
+        cursor: req.body.cursor || 0,
+        page_size: req.body.page_size,
+        page_token: req.body.page_token,
+      });
 
-        res.json({
-            serverTime: new Date().toISOString(),
-            updates: newUpdates
+      if (!pullValidation.success) {
+        res.status(400).json({
+          error: "Invalid pull request",
+          details: pullValidation.error.errors,
         });
-    } catch (e: any) {
-        console.error("Sync error:", e);
-        res.status(500).json({
-            error: "Internal server error during sync",
-            details: e.message
-        });
+        return;
+      }
+
+      const { cursor, page_size = 500, page_token } = pullValidation.data;
+      const { operations, nextCursor, hasMore } = await getServerChanges(
+        tenantId,
+        cursor,
+        page_size,
+        page_token
+      );
+
+      res.json({
+        cursor: nextCursor,
+        server_changes: operations,
+        has_more: hasMore,
+        next_page_token: hasMore ? Buffer.from(nextCursor.toString()).toString("base64") : undefined,
+      });
+      return;
     }
+
+    const validation = syncRequestSchema.safeParse({
+      tenant_id: tenantId,
+      client_id: req.body.client_id,
+      cursor: req.body.cursor,
+      operations: req.body.operations,
+      page_size: req.body.page_size,
+      page_token: req.body.page_token,
+    });
+
+    if (!validation.success) {
+      res.status(400).json({
+        error: "Invalid sync request",
+        details: validation.error.errors,
+      });
+      return;
+    }
+
+    const { client_id, cursor, operations } = validation.data;
+
+    const { acked, rejected } = await processOperations(
+      tenantId,
+      client_id,
+      operations || []
+    );
+
+    const { operations: serverChanges, nextCursor, hasMore } = await getServerChanges(
+      tenantId,
+      cursor,
+      500
+    );
+
+    res.json({
+      cursor: nextCursor,
+      acked,
+      rejected,
+      server_changes: serverChanges,
+      has_more: hasMore,
+      next_page_token: hasMore ? Buffer.from(nextCursor.toString()).toString("base64") : undefined,
+    });
+  } catch (error: unknown) {
+    console.error("Sync error:", error);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({
+      error: "Internal server error during sync",
+      details: errorMessage,
+    });
+  }
 });
 
-export default syncRouter;
+export default router;
