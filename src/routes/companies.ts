@@ -26,7 +26,7 @@ companyRouter.get("/my", async (req: AuthRequest, res) => {
         const [currentEmployee] = await db
             .select()
             .from(employees)
-            .where(eq(employees.id, req.employeeId));
+            .where(eq(employees.id, Number(req.employeeId)));
 
         if (!currentEmployee) {
             res.status(404).json({ error: "Employee not found" });
@@ -92,7 +92,7 @@ companyRouter.post("/", async (req: AuthRequest, res) => {
         const [currentEmployee] = await db
             .select()
             .from(employees)
-            .where(eq(employees.id, req.employeeId));
+            .where(eq(employees.id, Number(req.employeeId)));
 
         if (!currentEmployee) {
             res.status(404).json({ error: "Employee not found" });
@@ -206,7 +206,7 @@ companyRouter.post("/switch", async (req: AuthRequest, res) => {
         const [currentEmployee] = await db
             .select()
             .from(employees)
-            .where(eq(employees.id, req.employeeId));
+            .where(eq(employees.id, Number(req.employeeId)));
 
         if (!currentEmployee) {
             res.status(404).json({ error: "Employee not found" });
@@ -246,11 +246,33 @@ companyRouter.post("/switch", async (req: AuthRequest, res) => {
             return;
         }
 
+        if (!targetCompany.tenantId) {
+            res.status(500).json({ error: "Company has no tenant assigned" });
+            return;
+        }
+
         // Generate new JWT for the target employee record
-        const token = jwt.sign({ id: targetEmployee.uuid }, JWT_SECRET);
+        const token = jwt.sign({ 
+            id: targetEmployee.uuid,
+            tenant_id: targetCompany.tenantId.toString(),
+            company_ids: [targetEmployee.companyId.toString()],
+            role: targetEmployee.role,
+            sub: targetEmployee.uuid,
+            device_id: ''
+        }, JWT_SECRET);
 
         // Remove password from response
-        const { password: _, ...employeeWithoutPassword } = targetEmployee;
+        const { 
+            password: _p, 
+            passwordResetToken: _prt, 
+            passwordResetExpires: _pre,
+            emailVerificationToken: _evt, 
+            emailVerificationExpires: _eve,
+            isEmailVerified: _iev,
+            googleAuth: _ga,
+            isDeleted: _isd,
+            ...employeeWithoutPassword 
+        } = targetEmployee;
         const permissions = await getUserPermissions(targetEmployee.role, targetEmployee.companyId);
 
         res.json({

@@ -34,7 +34,7 @@ profileRouter.get("/", auth, async (req: AuthRequest, res) => {
         const [employee] = await db
             .select()
             .from(employees)
-            .where(eq(employees.id, req.employeeId));
+            .where(eq(employees.id, Number(req.employeeId)));
 
         if (!employee) {
             res.status(404).json({ error: "Employee not found" });
@@ -97,7 +97,7 @@ profileRouter.put("/", auth, async (req: AuthRequest, res) => {
         const [currentEmployee] = await db
             .select()
             .from(employees)
-            .where(eq(employees.id, req.employeeId));
+            .where(eq(employees.id, Number(req.employeeId)));
 
         if (!currentEmployee) {
             res.status(404).json({ error: "Employee not found" });
@@ -118,7 +118,7 @@ profileRouter.put("/", auth, async (req: AuthRequest, res) => {
                 .where(
                     and(
                         eq(employees.email, email),
-                        ne(employees.id, req.employeeId)
+                        ne(employees.id, Number(req.employeeId))
                     )
                 );
 
@@ -153,12 +153,12 @@ profileRouter.put("/", auth, async (req: AuthRequest, res) => {
             [updatedEmployee] = await db
                 .update(employees)
                 .set(employeeUpdateData)
-                .where(eq(employees.id, req.employeeId))
+                .where(eq(employees.id, Number(req.employeeId)))
                 .returning();
 
             // Sync password to mirror employee records if password was changed
             if (employeeUpdateData.password) {
-                await syncEmployeeAuthFields(req.employeeId, currentEmployee.email, {
+                await syncEmployeeAuthFields(Number(req.employeeId), currentEmployee.email, {
                     password: employeeUpdateData.password,
                 });
             }
@@ -243,7 +243,7 @@ profileRouter.put("/company", auth, async (req: AuthRequest, res) => {
         const [employee] = await db
             .select()
             .from(employees)
-            .where(eq(employees.id, req.employeeId));
+            .where(eq(employees.id, Number(req.employeeId)));
 
         if (!employee || (employee.role !== "admin" && !employee.isOwner)) {
             res.status(403).json({ error: "Only admins can update company information" });
@@ -310,7 +310,7 @@ const handleFileUpload = async (req: AuthRequestWithFile, res: any, target: "log
             const [employee] = await db
                 .select()
                 .from(employees)
-                .where(eq(employees.id, req.employeeId));
+                .where(eq(employees.id, Number(req.employeeId)));
 
             if (!employee || (employee.role !== "admin" && !employee.isOwner)) {
                 return res.status(403).json({ error: "Only admins can update company logo" });
@@ -355,7 +355,7 @@ const handleFileUpload = async (req: AuthRequestWithFile, res: any, target: "log
             const [currentEmployee] = await db
                 .select()
                 .from(employees)
-                .where(eq(employees.id, req.employeeId));
+                .where(eq(employees.id, Number(req.employeeId)));
 
             if (!currentEmployee) return res.status(404).json({ error: "Employee not found" });
 
@@ -370,7 +370,7 @@ const handleFileUpload = async (req: AuthRequestWithFile, res: any, target: "log
             const [updatedEmployee] = await db
                 .update(employees)
                 .set({ avatarUrl: imagePath, updatedAt: new Date() })
-                .where(eq(employees.id, req.employeeId))
+                .where(eq(employees.id, Number(req.employeeId)))
                 .returning();
 
             return res.status(200).json({

@@ -1,8 +1,8 @@
 import { Router, Response } from "express";
 import { authMiddleware, requireTenant } from "../middleware/auth-sync";
 import { processStockOperations, getStockChanges } from "../services/stock";
-import { stockSyncRequestSchema, stockPullRequestSchema } from "../validators/sync";
-import type { AuthRequest } from "../types/sync";
+import { stockSyncRequestSchema, stockPullRequestSchema } from "../validators/sync.validator";
+import type { AuthRequest } from "../types/sync.types";
 
 const router = Router();
 
@@ -77,7 +77,7 @@ router.post("/", async (req: AuthRequest, res: Response) => {
 
     const { operations, lastLedgerId } = await getStockChanges(
       tenantId,
-      last_ledger_id,
+      last_ledger_id ?? 0,
       200
     );
 

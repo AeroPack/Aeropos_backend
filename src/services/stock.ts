@@ -1,5 +1,5 @@
 import { query, queryOne, execute, getClient } from "../db/sync-db";
-import type { StockOperation, StockServerOperation, StockRejectedOperation } from "../types/sync";
+import type { StockOperation, StockServerOperation, StockRejectedOperation } from "../types/sync.types";
 
 interface DbStockLedger {
   id: number;

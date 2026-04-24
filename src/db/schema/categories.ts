@@ -3,7 +3,7 @@ import { companies } from "./companies";
 
 export const categories = pgTable("categories", {
     id: serial("id").primaryKey(),
-    uuid: uuid("uuid").defaultRandom().notNull(),
+    uuid: uuid("uuid").defaultRandom().notNull().unique(),
     name: text("name").notNull(),
     subcategory: text("subcategory"),
     isActive: boolean("is_active").default(true).notNull(),
@@ -11,6 +11,7 @@ export const categories = pgTable("categories", {
         .notNull()
         .references(() => companies.id, { onDelete: "cascade" }),
     isDeleted: boolean("is_deleted").default(false).notNull(),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

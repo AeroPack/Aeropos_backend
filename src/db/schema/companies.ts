@@ -1,8 +1,10 @@
 import { pgTable, text, uuid, timestamp, serial, boolean, integer } from "drizzle-orm/pg-core";
+import { tenants } from "./tenants";
 
 export const companies = pgTable("companies", {
     id: serial("id").primaryKey(),
     uuid: uuid("uuid").defaultRandom().notNull().unique(),
+    tenantId: integer("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
     businessName: text("business_name").notNull(),
     businessAddress: text("business_address"),
     taxId: text("tax_id"),

@@ -6,12 +6,16 @@ import { employees } from "../db/schema";
 import { eq } from "drizzle-orm";
 import { Role } from "../config/permissions";
 
-export interface AuthRequest extends Request {
-  employeeId?: number;
+type AuthRequestFields = {
+  employeeId?: number | string;
   companyId?: number;
   role?: Role;
   token?: string;
-}
+  requestId?: string;
+  deviceId?: string;
+};
+
+export type AuthRequest = Request & AuthRequestFields;
 
 export const auth = async (
   req: AuthRequest,
@@ -19,8 +23,11 @@ export const auth = async (
   next: NextFunction
 ) => {
   try {
-    // get the header
-    const token = req.header("x-auth-token");
+    // Support both x-auth-token and Authorization: Bearer headers
+    let token = req.header("x-auth-token");
+    if (!token) {
+      token = req.header("Authorization")?.replace("Bearer ", "");
+    }
 
     if (!token) {
       res.status(401).json({ error: "No auth token, access denied!" });
@@ -53,12 +60,14 @@ export const auth = async (
       return;
     }
 
-    req.employeeId = employee.id;
-    req.companyId = employee.companyId;
+    (req as any).employeeId = employee.id;
+    (req as any).companyId = employee.companyId;
     req.role = employee.role as Role;
     req.token = token;
+    req.requestId = req.header("X-Request-Id") || req.header("x-request-id");
+    req.deviceId = req.header("X-Device-Id") || req.header("x-device-id");
     next();
   } catch (e) {
-    res.status(500).json({ error: e });
+    res.status(500).json({ error: "INTERNAL_ERROR", message: String(e) });
   }
 };

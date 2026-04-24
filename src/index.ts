@@ -7,7 +7,7 @@ import unitRouter from "./routes/units";
 import productRouter from "./routes/products";
 import brandRouter from "./routes/brands";
 import invoiceRouter from "./routes/invoices";
-import syncRouter from "./routes/sync";
+import { syncRouter } from "./routes/sync";
 import authRouter from "./routes/auth";
 import customerRouter from "./routes/customers";
 import supplierRouter from "./routes/suppliers";
@@ -28,6 +28,9 @@ app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
   next();
 });
+
+// Handle preflight requests for ALL routes before CORS middleware
+app.options('*', cors());
 
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
@@ -50,7 +53,14 @@ app.use(cors({
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Requested-With", "x-auth-token"]
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Accept",
+    "X-Requested-With",
+    "x-auth-token",
+    "x-company-id"   // ← ADDED: required for Flutter sync requests
+  ]
 }));
 
 app.use(compression({
@@ -94,7 +104,7 @@ app.get("/api/test", (req, res) => {
   res.json({ message: "API is working", time: new Date().toISOString() });
 });
 
-const PORT = process.env.PORT || 5005;
+const PORT = process.env.PORT || 5004;
 initializeDatabase()
   .then(() => {
     app.listen(Number(PORT), "0.0.0.0", () => {

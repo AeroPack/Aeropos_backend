@@ -12,6 +12,9 @@ export async function runMigrations() {
   try {
     const migrationFiles = [
       "001_sync_core.sql",
+      "002_uuid_constraints.sql",
+      "003_soft_delete_columns.sql",
+      "004_tenants_and_company_hierarchy.sql",
     ];
 
     for (const file of migrationFiles) {

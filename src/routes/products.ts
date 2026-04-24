@@ -4,11 +4,13 @@ import { products, NewProduct, units, categories, brands } from "../db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import { auth, AuthRequest } from "../middleware/auth";
 import { checkPermission } from "../middleware/checkPermission";
+import { checkDeprecatedFields } from "../middleware/validate";
+import { resolveProductUuids, findProductByUuid } from "../services/uuid-resolver";
 
 const productRouter = Router();
 
-// All product routes require authentication
 productRouter.use(auth);
+productRouter.use(checkDeprecatedFields);
 
 productRouter.get("/", checkPermission('VIEW_PRODUCTS'), async (req: AuthRequest, res) => {
     try {
@@ -51,13 +53,13 @@ productRouter.get("/:uuid", checkPermission('VIEW_PRODUCTS'), async (req: AuthRe
             );
 
         if (!product) {
-            res.status(404).json({ error: "Product not found" });
+            res.status(404).json({ error: "NOT_FOUND", field: "uuid", message: "Product not found" });
             return;
         }
 
         res.json(product);
     } catch (e) {
-        res.status(500).json({ error: e });
+        res.status(500).json({ error: "INTERNAL_ERROR", message: e });
     }
 });
 
@@ -67,50 +69,62 @@ productRouter.post("/", checkPermission('MANAGE_PRODUCTS'), async (req: AuthRequ
         const productData = isArray ? req.body : [req.body];
         const results = [];
 
+        console.log(`[SYNC] Products POST received ${productData.length} item(s) from company ${req.companyId}`);
+
         for (const item of productData) {
             const { uuid, unitUuid, categoryUuid, brandUuid, ...rest } = item;
-            let unitId = rest.unitId;
-            let categoryId = rest.categoryId;
-            let brandId = rest.brandId;
+            
+            console.log(`[SYNC] Processing product: uuid=${uuid}, unitUuid=${unitUuid}, categoryUuid=${categoryUuid}, brandUuid=${brandUuid}`);
 
-            if (unitUuid) {
-                const [unit] = await db
-                    .select({ id: units.id })
-                    .from(units)
-                    .where(and(eq(units.uuid, unitUuid), eq(units.companyId, req.companyId!)));
-                if (unit) unitId = unit.id;
+            const { resolved, error: resolveError } = await resolveProductUuids(
+                unitUuid,
+                categoryUuid,
+                brandUuid,
+                req.companyId!
+            );
+
+            if (resolveError) {
+                console.log(`[SYNC] UUID resolution failed: ${resolveError.error} - ${resolveError.message}`);
+                res.status(400).json({
+                    error: "INVALID_REFERENCE",
+                    field: resolveError.field,
+                    message: resolveError.message,
+                });
+                return;
             }
 
-            if (categoryUuid) {
-                const [category] = await db
-                    .select({ id: categories.id })
-                    .from(categories)
-                    .where(and(eq(categories.uuid, categoryUuid), eq(categories.companyId, req.companyId!)));
-                if (category) categoryId = category.id;
-            }
+            console.log(`[SYNC] Resolved IDs: unitId=${resolved.unitId}, categoryId=${resolved.categoryId}, brandId=${resolved.brandId}`);
 
-            if (brandUuid) {
-                const [brand] = await db
-                    .select({ id: brands.id })
-                    .from(brands)
-                    .where(and(eq(brands.uuid, brandUuid), eq(brands.companyId, req.companyId!)));
-                if (brand) brandId = brand.id;
-            }
+            let unitId = resolved.unitId;
+            let categoryId = resolved.categoryId;
+            let brandId = resolved.brandId;
 
-            // Upsert by UUID: if product with this UUID already exists for this company, update it
+            const now = new Date();
+            const incomingUpdatedAt = item.updatedAt ? new Date(item.updatedAt) : now;
+
             if (uuid) {
-                const [existing] = await db
-                    .select()
-                    .from(products)
-                    .where(and(eq(products.uuid, uuid), eq(products.companyId, req.companyId!)));
+                const existing = await findProductByUuid(uuid, req.companyId!);
 
-                if (existing) {
+                if (existing.exists) {
+                    const [existingProduct] = await db
+                        .select({ updatedAt: products.updatedAt })
+                        .from(products)
+                        .where(and(eq(products.uuid, uuid), eq(products.companyId, req.companyId!)));
+                    
+                    const existingUpdatedAt = existingProduct?.updatedAt ? new Date(existingProduct.updatedAt) : new Date(0);
+                    
+                    if (incomingUpdatedAt <= existingUpdatedAt) {
+                        console.log(`[SYNC] Product ${uuid} skipped - incoming (${incomingUpdatedAt.toISOString()}) is not newer than existing (${existingUpdatedAt.toISOString()})`);
+                        continue;
+                    }
+                    
+                    console.log(`[SYNC] Product ${uuid} updating (timestamp conflict resolved)`);
                     const updateData: Partial<NewProduct> = {
                         ...rest,
                         ...(unitId !== undefined && { unitId }),
                         ...(categoryId !== undefined && { categoryId }),
                         ...(brandId !== undefined && { brandId }),
-                        updatedAt: new Date(),
+                        updatedAt: now,
                     };
                     const [updated] = await db
                         .update(products)
@@ -136,6 +150,8 @@ productRouter.post("/", checkPermission('MANAGE_PRODUCTS'), async (req: AuthRequ
                 .insert(products)
                 .values(newProduct)
                 .returning();
+            
+            console.log(`[SYNC] Created product: ${createdProduct.uuid} with id=${createdProduct.id}`);
             results.push(createdProduct);
         }
 
@@ -150,33 +166,27 @@ productRouter.put("/:uuid", checkPermission('MANAGE_PRODUCTS'), async (req: Auth
     try {
         const { uuid } = req.params;
         const { unitUuid, categoryUuid, brandUuid, ...rest } = req.body;
-        let unitId = rest.unitId;
-        let categoryId = rest.categoryId;
-        let brandId = rest.brandId;
 
-        if (unitUuid) {
-            const [unit] = await db
-                .select({ id: units.id })
-                .from(units)
-                .where(and(eq(units.uuid, unitUuid), eq(units.companyId, req.companyId!)));
-            if (unit) unitId = unit.id;
+        console.log(`[SYNC] Products PUT for ${uuid}: unitUuid=${unitUuid}, categoryUuid=${categoryUuid}, brandUuid=${brandUuid}`);
+
+        const { resolved, error: resolveError } = await resolveProductUuids(
+            unitUuid,
+            categoryUuid,
+            brandUuid,
+            req.companyId!
+        );
+
+        if (resolveError) {
+            console.log(`[SYNC] UUID resolution failed: ${resolveError.error} - ${resolveError.message}`);
+            res.status(400).json(resolveError);
+            return;
         }
 
-        if (categoryUuid) {
-            const [category] = await db
-                .select({ id: categories.id })
-                .from(categories)
-                .where(and(eq(categories.uuid, categoryUuid), eq(categories.companyId, req.companyId!)));
-            if (category) categoryId = category.id;
-        }
+        console.log(`[SYNC] Resolved IDs: unitId=${resolved.unitId}, categoryId=${resolved.categoryId}, brandId=${resolved.brandId}`);
 
-        if (brandUuid) {
-            const [brand] = await db
-                .select({ id: brands.id })
-                .from(brands)
-                .where(and(eq(brands.uuid, brandUuid), eq(brands.companyId, req.companyId!)));
-            if (brand) brandId = brand.id;
-        }
+        let unitId = resolved.unitId ?? rest.unitId;
+        let categoryId = resolved.categoryId ?? rest.categoryId;
+        let brandId = resolved.brandId ?? rest.brandId;
 
         const updatedProduct: Partial<NewProduct> = {
             ...rest,
@@ -197,22 +207,24 @@ productRouter.put("/:uuid", checkPermission('MANAGE_PRODUCTS'), async (req: Auth
             .returning();
 
         if (!result) {
-            res.status(404).json({ error: "Product not found" });
+            res.status(404).json({ error: "NOT_FOUND", field: "uuid", message: "Product not found" });
             return;
         }
 
+        console.log(`[SYNC] Updated product: ${uuid}`);
         res.json(result);
     } catch (e) {
-        res.status(500).json({ error: e });
+        res.status(500).json({ error: "INTERNAL_ERROR", message: String(e) });
     }
 });
 
 productRouter.delete("/:uuid", checkPermission('MANAGE_PRODUCTS'), async (req: AuthRequest, res) => {
     try {
         const { uuid } = req.params;
+        const now = new Date();
         const [deletedProduct] = await db
             .update(products)
-            .set({ isDeleted: true, updatedAt: new Date() })
+            .set({ isDeleted: true, deletedAt: now, updatedAt: now })
             .where(
                 and(
                     eq(products.uuid, uuid),
@@ -222,7 +234,7 @@ productRouter.delete("/:uuid", checkPermission('MANAGE_PRODUCTS'), async (req: A
             .returning();
 
         if (!deletedProduct) {
-            res.status(404).json({ error: "Product not found" });
+            res.status(404).json({ error: "NOT_FOUND", field: "uuid", message: "Product not found" });
             return;
         }
 

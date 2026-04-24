@@ -28,6 +28,7 @@ export const products = pgTable("products", {
         .notNull()
         .references(() => companies.id, { onDelete: "cascade" }),
     isDeleted: boolean("is_deleted").default(false).notNull(),
+    deletedAt: timestamp("deleted_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

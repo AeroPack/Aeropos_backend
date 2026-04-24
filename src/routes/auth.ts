@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { OAuth2Client } from "google-auth-library";
 import { db } from "../db";
-import { companies, employees, NewCompany, NewEmployee } from "../db/schema";
+import { companies, employees, tenants, NewCompany, NewEmployee, NewTenant } from "../db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -108,6 +108,36 @@ authRouter.post("/signup", async (req, res) => {
             .values(newCompany)
             .returning();
 
+        // Create a tenant for this new company
+        const tenantSlug = businessName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '')
+            .substring(0, 90) + '-' + Date.now();
+
+        const newTenant: NewTenant = {
+            externalKey: `tenant_${createdCompany.uuid}`,
+            name: businessName,
+            slug: tenantSlug,
+            status: 'active',
+            plan: 'free',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+
+        const [createdTenant] = await db
+            .insert(tenants)
+            .values(newTenant)
+            .returning();
+
+        // Link tenant to company
+        await db
+            .update(companies)
+            .set({ tenantId: createdTenant.id })
+            .where(eq(companies.id, createdCompany.id));
+
+        const companyWithTenant = { ...createdCompany, tenantId: createdTenant.id };
+
         // Generate verification token
         const verificationToken = crypto.randomBytes(32).toString('hex');
         const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
@@ -143,16 +173,33 @@ authRouter.post("/signup", async (req, res) => {
             .where(eq(companies.id, createdCompany.id));
 
         // Generate JWT token
-        const token = jwt.sign({ id: createdEmployee.uuid }, JWT_SECRET);
+        const token = jwt.sign({ 
+            id: createdEmployee.uuid,
+            tenant_id: createdTenant.id.toString(),
+            company_ids: [createdEmployee.companyId.toString()],
+            role: createdEmployee.role,
+            sub: createdEmployee.uuid,
+            device_id: ''
+        }, JWT_SECRET);
 
-        // Remove password from response
-        const { password: _, ...employeeWithoutPassword } = createdEmployee;
+        // Remove sensitive fields from response
+        const { 
+            password: _p, 
+            passwordResetToken: _prt, 
+            passwordResetExpires: _pre,
+            emailVerificationToken: _evt, 
+            emailVerificationExpires: _eve,
+            isEmailVerified: _iev,
+            googleAuth: _ga,
+            isDeleted: _isd,
+            ...employeeWithoutPassword 
+        } = createdEmployee;
 
         const permissions = getDefaultPermissions("admin"); // Owner is admin
 
         res.status(201).json({
             employee: { ...employeeWithoutPassword, permissions },
-            company: createdCompany,
+            company: companyWithTenant,
             token,
         });
     } catch (e) {
@@ -264,12 +311,37 @@ async function respondWithEmployeeLogin(employee: any, res: any) {
         return;
     }
 
-    const token = jwt.sign({ id: employee.uuid }, JWT_SECRET);
-    const { password: _, ...employeeWithoutPassword } = employee;
+    if (!company.tenantId) {
+        res.status(500).json({ error: "Company has no tenant assigned" });
+        return;
+    }
+
+        const token = jwt.sign({ 
+            id: employee.uuid,
+            tenant_id: company.tenantId.toString(),
+            company_ids: [employee.companyId.toString()],
+            role: employee.role,
+            sub: employee.uuid,
+            device_id: ''
+        }, JWT_SECRET);
+    const { 
+        password: _p, 
+        passwordResetToken: _prt, 
+        passwordResetExpires: _pre,
+        emailVerificationToken: _evt, 
+        emailVerificationExpires: _eve,
+        googleAuth: _ga,
+        isDeleted: _isd,
+        ...employeeWithoutPassword 
+    } = employee;
     const permissions = await getUserPermissions(employee.role, employee.companyId);
 
     res.status(200).json({
-        employee: { ...employeeWithoutPassword, permissions },
+        employee: { 
+            ...employeeWithoutPassword, 
+            permissions,
+            isEmailVerified: employee.isEmailVerified 
+        },
         company: company,
         token,
     });
@@ -287,7 +359,7 @@ authRouter.get("/me", auth, async (req: AuthRequest, res) => {
         const [employee] = await db
             .select()
             .from(employees)
-            .where(eq(employees.id, req.employeeId));
+            .where(eq(employees.id, Number(req.employeeId)));
 
         if (!employee) {
             res.status(404).json({ error: "Employee not found" });
@@ -305,13 +377,26 @@ authRouter.get("/me", auth, async (req: AuthRequest, res) => {
             return;
         }
 
-        // Remove password from response
-        const { password: _, ...employeeWithoutPassword } = employee;
+        // Remove only truly sensitive fields
+        const { 
+            password: _p, 
+            passwordResetToken: _prt, 
+            passwordResetExpires: _pre,
+            emailVerificationToken: _evt, 
+            emailVerificationExpires: _eve,
+            googleAuth: _ga,
+            isDeleted: _isd,
+            ...employeeWithoutPassword 
+        } = employee;
 
         const permissions = await getUserPermissions(employee.role, employee.companyId);
 
         res.status(200).json({
-            employee: { ...employeeWithoutPassword, permissions },
+            employee: { 
+                ...employeeWithoutPassword, 
+                permissions,
+                isEmailVerified: employee.isEmailVerified 
+            },
             company: company,
         });
     } catch (e) {
@@ -480,6 +565,36 @@ authRouter.post("/google", async (req, res) => {
                 .values(newCompany)
                 .returning();
 
+            // Create a tenant for this new company (Google signup)
+            const tenantSlug = businessName
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/(^-|-$)/g, '')
+                .substring(0, 90) + '-' + Date.now();
+
+            const newTenant: NewTenant = {
+                externalKey: `tenant_${createdCompany.uuid}`,
+                name: businessName,
+                slug: tenantSlug,
+                status: 'active',
+                plan: 'free',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            const [createdTenant] = await db
+                .insert(tenants)
+                .values(newTenant)
+                .returning();
+
+            // Link tenant to company
+            await db
+                .update(companies)
+                .set({ tenantId: createdTenant.id })
+                .where(eq(companies.id, createdCompany.id));
+
+            const companyWithTenant = { ...createdCompany, tenantId: createdTenant.id };
+
             const randomPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
             const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
@@ -507,13 +622,30 @@ authRouter.post("/google", async (req, res) => {
                 .set({ createdByEmployeeId: createdEmployee.id })
                 .where(eq(companies.id, createdCompany.id));
 
-            const token = jwt.sign({ id: createdEmployee.uuid }, JWT_SECRET);
-            const { password: _, ...employeeWithoutPassword } = createdEmployee;
+            const token = jwt.sign({ 
+                id: createdEmployee.uuid,
+                tenant_id: createdTenant.id.toString(),
+                company_ids: [createdEmployee.companyId.toString()],
+                role: createdEmployee.role,
+                sub: createdEmployee.uuid,
+                device_id: ''
+            }, JWT_SECRET);
+            const { 
+                password: _p, 
+                passwordResetToken: _prt, 
+                passwordResetExpires: _pre,
+                emailVerificationToken: _evt, 
+                emailVerificationExpires: _eve,
+                isEmailVerified: _iev,
+                googleAuth: _ga,
+                isDeleted: _isd,
+                ...employeeWithoutPassword 
+            } = createdEmployee;
             const permissions = getDefaultPermissions("admin");
 
             res.status(201).json({
                 employee: { ...employeeWithoutPassword, permissions },
-                company: createdCompany,
+                company: companyWithTenant,
                 token,
             });
         }
