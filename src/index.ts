@@ -57,7 +57,8 @@ app.use(cors({
     "Accept",
     "X-Requested-With",
     "x-auth-token",
-    "x-company-id"   // ← ADDED: required for Flutter sync requests
+    "x-company-id",
+    "x-tenant-id"    // ← ADD THIS
   ]
 }));
 
