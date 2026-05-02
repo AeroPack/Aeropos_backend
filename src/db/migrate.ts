@@ -15,6 +15,7 @@ export async function runMigrations() {
       "002_uuid_constraints.sql",
       "003_soft_delete_columns.sql",
       "004_tenants_and_company_hierarchy.sql",
+      "005_operations_log.sql",
     ];
 
     for (const file of migrationFiles) {
