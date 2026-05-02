@@ -29,9 +29,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Handle preflight requests for ALL routes before CORS middleware
-app.options('*', cors());
-
 app.use(cors({
   origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
     if (!origin) return callback(null, true);
@@ -39,8 +36,9 @@ app.use(cors({
     const allowedPatterns = [
       /^http:\/\/localhost:\d+$/,
       /^http:\/\/127\.0\.0\.1:\d+$/,
-      /^https:\/\/main\.aeropackpos\.in$/,
-      /^https:\/\/aeropackpos\.in$/
+      /^https:\/\/main\.aeropackpos\.in(\/|$)/,
+      /^https:\/\/aeropackpos\.in(\/|$)/,
+      /^https:\/\/www\.aeropackpos\.in(\/|$)/
     ];
 
     const isAllowed = allowedPatterns.some(pattern => pattern.test(origin));
